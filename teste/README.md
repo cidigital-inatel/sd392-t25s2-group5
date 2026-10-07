@@ -1,54 +1,74 @@
-# Funcionamento Detalhado do Código PyTorch
+# Documentação Detalhada do Código OCR com PyTorch e OpenCV
 
-O script foi projetado com boas práticas de programação em Deep Learning, focando em **portabilidade** (funciona em qualquer máquina) e **robustez** (previne falhas de memória e compatibilidade).
-
----
-
-## 1. Seleção Dinâmica do Dispositivo (Dispositivo Alvo)
-```python
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"Dispositivo selecionado: {device.type.upper()}")
-```
-* **O que faz:** Identifica o hardware disponível no computador. Se uma GPU Nvidia compatível com CUDA estiver instalada e configurada, a variável `device` será definida como `'cuda'`. Caso contrário, ela assume o valor `'cpu'`.
-* **Por que é importante:** Garante que o código rode sem erros em qualquer ambiente, usando aceleração por hardware sempre que possível.
+Este documento descreve o funcionamento do sistema de **Reconhecimento Óptico de Caracteres (OCR)** baseado em uma Rede Neural Convolucional (CNN) treinada no dataset EMNIST e integrada com algoritmos de processamento de imagem do OpenCV.
 
 ---
 
-## 2. Carregamento Seguro na CPU (Contorno de Bug)
-```python
-modelo_estado = torch.load("../pth/emnist_ocr_model.pth", map_location=torch.device('cpu'), weights_only=False)
-```
-* **O que faz:** Abre o arquivo de pesos do modelo (`emnist_ocr_model.pth`). O parâmetro crítico aqui é o `map_location=torch.device('cpu')`. Ele força o PyTorch a desserializar e carregar todos os dados temporariamente na memória RAM do computador (CPU).
-* **Por que é importante:** Como o próprio comentário do código destaca, carregar arquivos `.pth` diretamente na memória da GPU pode causar falhas de decodificação ou corrupção de dados em algumas versões do PyTorch/CUDA. Forçar o carregamento inicial na CPU elimina esse risco. O `weights_only=False` permite carregar o dicionário completo de estados (incluindo metadados se houver).
+## 1. Visão Geral do Sistema
+O código possui um pipeline dividido em três grandes etapas:
+1. **Definição e Carga do Modelo:** Estruturação da arquitetura CNN em PyTorch e importação dos pesos pré-treinados.
+2. **Segmentação de Imagem:** Uso do OpenCV para binarização, detecção de contornos e agrupamento inteligente de caracteres em linhas de texto.
+3. **Inferência e Reconstrução:** Processamento individual de cada caractere, predição pela rede neural e concatenação do texto final respeitando espaços e quebras de linha.
 
 ---
 
-## 3. Transferência de Tensores para a GPU
+## 2. Arquitetura da Rede Neural (`EMNISTCNN`)
+O modelo é composto por duas etapas principais: Extração de Características (Convoluções) e Classificação (Camadas Lineares).
+
 ```python
-modelo_estado_cuda = {camada: tensores.to(device) if hasattr(tensores, 'to') else tensores 
-                      for camada, tensores in modelo_estado.items()}
+class EMNISTCNN(nn.Module):
+    # ... (definição do modelo)
 ```
-* **O que faz:** Utiliza uma compreensão de dicionário (*dictionary comprehension*) para percorrer todas as camadas e tensores carregados. 
-* **Como funciona internamente:** Para cada item, o código verifica se o objeto possui o método `.to()` (através de `hasattr(tensores, 'to')`). Se possuir (o que significa que é um Tensor do PyTorch), ele aplica `.to(device)`, enviando o peso daquela camada específica para a GPU (ou mantendo na CPU caso o CUDA não esteja disponível). Se não for um tensor, ele mantém o objeto original.
+
+### Detalhes dos Blocos:
+* **`conv_block1`**: 
+  - Duas camadas convolucionais (`Conv2d`) com 32 filtros de tamanho 3x3.
+  - Camadas de `BatchNorm2d` para acelerar a convergência e estabilizar o treino.
+  - Função de ativação `ReLU`.
+  - `MaxPool2d` de 2x2 para reduzir a resolução espacial pela metade.
+  - `Dropout2d(0.25)` para reduzir o Overfitting.
+* **`conv_block2`**: 
+  - Estrutura idêntica ao primeiro bloco, porém expandindo os canais de 32 para 64, permitindo a extração de feições mais complexas.
+* **`classifier`**: 
+  - `Flatten`: Converte o mapa de características 3D em um vetor unidimensional de 1024 elementos.
+  - Camada linear intermediária de 256 neurônios com Dropout de 50%.
+  - Camada de saída linear com 47 neurônios correspondentes às classes do `EMNIST_MAPPING`.
 
 ---
 
-## 4. Inspeção das Camadas do Modelo
-```python
-for camada, tensores in modelo_estado_cuda.items():
-    if 'weight' in camada:
-        shape = list(tensores.shape) if hasattr(tensores, 'shape') else "N/A"
-        print(f"Camada: {camada:<30} | Formato (na GPU): {shape}")
-```
-* **O que faz:** Itera pelo novo dicionário já alocado no dispositivo correto para listar a estrutura do modelo.
-* **Filtro de Pesos:** O `if 'weight' in camada` filtra a busca para exibir apenas os tensores que representam os **pesos** das camadas (ignorando vieses/*biases* ou estados do otimizador).
-* **Extração do Formato:** Ele captura as dimensões da matriz de pesos (`tensores.shape`) e exibe o nome da camada alinhado à esquerda junto com o seu formato/dimensão (ex: `[out_channels, in_channels, kernel_size, kernel_size]` para uma camada convolucional).
+## 3. Algoritmo de Segmentação e Lógica de Linhas
+
+A função `segment_and_predict` processa a imagem de forma sequencial utilizando heurísticas geométricas:
+
+### A. Binarização de Otsu
+A imagem é convertida para escala de cinza e binarizada com `cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU`. Isto garante que o fundo se torne completamente preto (0) e os caracteres fiquem em branco (255), formato exigido para a detecção de contornos.
+
+### B. Separação de Linhas (Agrupamento Vertical)
+1. Os contornos válidos (maiores que 5x5 pixels) são coletados.
+2. É calculada a **altura média** de todos os caracteres detectados.
+3. A tolerância de linha é definida como `altura_media * 0.5`.
+4. O algoritmo ordena os blocos pelo eixo Y. Se o Y do caractere atual diferir do anterior por um valor menor ou igual à tolerância, ele é agrupado na mesma linha. Caso contrário, inicia-se uma nova linha.
+
+### C. Ordenação Horizontal e Espaçamento
+Dentro de cada linha:
+1. Os caracteres são ordenados da esquerda para a direita (eixo X).
+2. Calcula-se a distância horizontal entre o fim do caractere anterior (`x_anterior + largura_anterior`) e o início do atual (`x`).
+3. Se essa distância for maior que o limiar (`largura_media * 0.4`), um caractere de **espaço (" ")** é inserido na string.
 
 ---
 
-## 5. Tratamento de Erros (Bloco Try-Except)
-```python
-except Exception as e:
-  print(f"Erro ao carregar o modelo: {e}")
-```
-* **O que faz:** Caso o arquivo não exista no caminho especificado (`../pth/...`), esteja corrompido ou falte memória na GPU, o programa não vai quebrar abruptamente. Ele captura a exceção e imprime uma mensagem amigável explicando o motivo da falha.
+## 4. Normalização do Input da Rede
+Antes de enviar o recorte (ROI) do caractere para a rede neural, ele sofre as seguintes transformações:
+1. **Adição de Margem (Padding):** É adicionada uma borda preta proporcional ao tamanho do caractere para evitar distorções severas na proporção original.
+2. **Redimensionamento:** A imagem é redimensionada via interpolação de área para exatamente `28x28` pixels.
+3. **Escalonamento:** Os pixels (0-255) são divididos por `255.0` para virar floats entre `0.0` e `1.0`.
+4. **Modificação do Shape:** O tensor é expandido usando `.unsqueeze(0).unsqueeze(0)` para atingir o formato exigido pelo PyTorch: `[Batch, Channel, Height, Width]` (ex: `[1, 1, 28, 28]`).
+
+---
+
+## 5. Mapeamento de Saída (`EMNIST_MAPPING`)
+O índice do neurônio com maior ativação (`outputs.max(1)`) é convertido no caractere correspondente usando a lista de mapeamento de 47 classes balanceadas do EMNIST:
+
+* **0-9**: Números
+* **A-Z**: Letras Maiúsculas
+* **a-t**: Letras Minúsculas selecionadas (com grafia distinta das maiúsculas)
