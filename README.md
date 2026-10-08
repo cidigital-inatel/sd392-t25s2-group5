@@ -1,7 +1,5 @@
-﻿![C:\Users\elivander.pereira\AppData\Local\Microsoft\Windows\INetCache\Content.MSO\B163FC90.tmp](Aspose.Words.c2f5b189-71c0-48b5-901c-1b7e76edcbf0.001.png)
+Identificação
 
-<a name="_heading=h.di4fn2xu293v"></a><a name="_hlk239299425"></a>Plano de Trabalho
-1. # <a name="_heading=h.89kwu6tr6v6"></a>Identificação
 Este Plano de Trabalho descreve a proposta para o presente projeto de trabalho de conclusão de curso (TCC) que será executado pelo aluno Alerson Anizio Ribeiro Rezende da segunda turma do programa CI Digital no polo Inatel, conforme descritos na tabela de identificação a seguir:
 
 |Título do Projeto|OCR  para imagens de 28x28 pixels MNIST/Extended MNIST|
@@ -14,30 +12,31 @@ Este Plano de Trabalho descreve a proposta para o presente projeto de trabalho d
 |Membros     |Alerson Anizio Ribeiro Rezende|
 |Orientador|Dr. Elivander Judas Tadeu Pereira|
 
-1. # <a name="_heading=h.awwqk8ssaq1b"></a>Objeto 
-   1. <a name="_heading=h.lpfz7i7myqxm"></a>Resumo
+1.Objeto 
+
+>Resumo
 
 Projetar um sistema de OCR (Reconhecimento Óptico de Caracteres) para imagens de 28x28 pixels (formato clássico do MNIST/Extended MNIST) em SystemVerilog utilizando a metodologia UVM (Universal Verification Methodology) no AMD Xilinx Vivado envolve duas frentes: o design do acelerador de hardware (Inferência da IA) e o ambiente de verificação para garantir que o hardware funciona exatamente como o modelo matemático.
 
-1. <a name="_heading=h.zgxtvmfgfyp4"></a>Objetivo Geral
+>Objetivo Geral
 
 O objetivo principal de um projeto de OCR (Reconhecimento Ótico de Caracteres) usando redes neurais em um FPGA é realizar a leitura e extração de textos de imagens com altíssima velocidade (baixa latência) e baixo consumo de energia, processando os dados diretamente no "hardware" (na borda/edge), sem depender de servidores em nuvem.
 
-1. <a name="_heading=h.ofcl3372173k"></a>Objetivos Específicos
+>Objetivos Específicos
 
 São objetivos para a execução deste Plano de Trabalho:
 
 1. Treinamento (Software): Treinar uma Rede Neural Convolucional (CNN) simples ou uma Rede Neural Multicamadas (MLP) em Python (PyTorch ou TensorFlow) usando o dataset EMNIST (que contém letras e números).
-1. **Quantização:** Converter os pesos de ponto flutuante (Float32) para ponto fixo (como INT8). Hardwares FPGA são massivamente mais eficientes com números inteiros. 
-1. **Geração do IP:** Usar ferramentas como **hls4ml** (ferramenta de código aberto que converte modelos de IA para Vivado HLS) ou o **Vitis AI** para gerar o código RTL/SystemVerilog dos blocos de processamento (Convolução, Ativação ReLU, MaxPooling, Dense).
-1. # <a name="_heading=h.svltnw5ckacq"></a>Relevância do Projeto
-   1. <a name="_heading=h.9bgtqbtnaege"></a>Problema de Pesquisa e Justificativa
+2. **Quantização:** Converter os pesos de ponto flutuante (Float32) para ponto fixo (como INT8). Hardwares FPGA são massivamente mais eficientes com números inteiros. 
+3. **Geração do IP:** Usar ferramentas como **hls4ml** (ferramenta de código aberto que converte modelos de IA para Vivado HLS) ou o **Vitis AI** para gerar o código RTL/SystemVerilog dos blocos de processamento (Convolução, Ativação ReLU, MaxPooling, Dense).
+
+>Problema de Pesquisa e Justificativa
 
 Projetar um sistema de OCR (Reconhecimento Óptico de Caracteres) usando Redes Neurais em um FPGA (Field Programmable Gate Array) une o poder de processamento da inteligência artificial com a alta eficiência do hardware dedicado.
 
 A principal relevância dessa abordagem está em resolver três grandes gargalos de sistemas tradicionais (baseados em CPU/GPU): latência determinística, eficiência energética e autonomia de borda (Edge Computing).
 
-1. <a name="_heading=h.o6c6l7os2427"></a>Desafios tecnológicos
+>Desafios tecnológicos
 
 Projetar um sistema de Reconhecimento Ótico de Caracteres (OCR) usando redes neurais em um FPGA (Field Programmable Gate Array) traz grandes vantagens de velocidade e eficiência energética, mas impõe desafios complexos de engenharia de hardware e software.
 
