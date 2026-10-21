@@ -13,10 +13,13 @@ O script detecta automaticamente se há uma GPU NVIDIA disponível com suporte a
 
 ## 2. Pipeline de Dados (Dataset e DataLoaders)
 
-### O Dataset EMNIST (Split: Balanced)
-O script utiliza o **Torchvision** para baixar e gerenciar o dataset de forma nativa. O split `balanced` foi escolhido por conter uma distribuição uniforme com **47 classes no total**:
-- **0 a 9**: Dígitos numéricos.
-- **Letras**: Letras maiúsculas e minúsculas do alfabeto latino (unificando caracteres onde a escrita manual de maiúsculas e minúsculas é virtualmente idêntica, como 'C', 'c', 'O', 'o', 'S', 's').
+### O Dataset EMNIST (Split: byclass)
+O script utiliza o **Torchvision** para baixar e gerenciar o dataset de forma nativa. O split `byclass` é a divisão mais completa e desafiadora da base de dados EMNIST Dataset
+• Total de amostras: 814.255 caracteres manuscritos.
+• Número de classes: 62 classes desbalanceadas.
+• Conjunto de caracteres: Inclui dígitos de 0 a 9 (10 classes), maiúsculas de A a Z (26 classes) e minúsculas de a a z (26 classes).
+• Formato das imagens: Imagens em escala de cinza de 28x28 pixels, compatíveis com a estrutura do MNIST original (com rotação e inversão aplicadas pelo NIST).
+• Desbalanceamento: As classes não possuem a mesma quantidade de exemplos, refletindo a escrita real da língua inglesa e dos números
 
 ### Pré-processamento NATIVO
 O `transforms.ToTensor()` realiza duas operações cruciais automaticamente:

@@ -15,13 +15,13 @@ transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-print("Baixando e carregando dados do EMNIST (Split: balanced)...")
+print("Baixando e carregando dados do EMNIST (Split: byclass)...")
 # Baixa automaticamente para a pasta './data' se não existir
 train_dataset = torchvision.datasets.EMNIST(
-    root='./data', split='balanced', train=True, download=True, transform=transform
+    root='./data', split='byclass', train=True, download=True, transform=transform
 )
 test_dataset = torchvision.datasets.EMNIST(
-    root='./data', split='balanced', train=False, download=True, transform=transform
+    root='./data', split='byclass', train=False, download=True, transform=transform
 )
 
 # Criar DataLoaders
@@ -29,8 +29,8 @@ batch_size = 128
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-# O split balanced possui exatamente 47 classes
-num_classes = 47
+# O split byclass possui exatamente 62 classes
+num_classes = 62
 print(f"Dados carregados com sucesso! Total de classes: {num_classes}")
 
 # 3. Arquitetura da CNN

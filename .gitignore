@@ -55,3 +55,5 @@ dkms.conf
 *.dwo
 
 treino/data/
+sintetico/data/
+
