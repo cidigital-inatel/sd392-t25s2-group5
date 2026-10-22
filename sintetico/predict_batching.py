@@ -234,6 +234,14 @@ def aplicar_heuristica_por_perfil(detalhes_letras):
 # 5. EXECUÇÃO PRINCIPAL
 # =====================================================================
 if __name__ == "__main__":
+    import sys
+    # IMPEDE QUE CLIQUES NO TERMINAL DO WINDOWS TRAVEM O PYTORCH
+    if sys.platform == "win32":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), 0xF7)
+
+    print("Inicializando o sistema...")  
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     caminho_pesos = r"E:\ocr\sd392-t25s2-group5\sintetico\modelo_emnist.pth"
     caminho_da_imagem_frase = r"E:\ocr\sd392-t25s2-group5\sintetico\frase.jpg"
@@ -249,15 +257,20 @@ if __name__ == "__main__":
         import time
         inicio_timer = time.time()
         
-        # 1. Executa a predição via Batching
+        # NOVO: Feedback visual claro para o usuário saber que a IA está pensando
+        print("[PROCESSANDO] Segmentando imagem e executando inferência no modelo (Batching)...")
+        print("Nota: A primeira execução da GPU/CPU pode levar alguns segundos.")
+        
+        # 1. Executa a predição via Batching (O gargalo está aqui)
         frase_bruta, analise = prever_frase(caminho_da_imagem_frase, modelo_ocr, device)
         
+        print("[PROCESSANDO] Aplicando regras heurísticas de maiúsculas/minúsculas...")
         # 2. Executa o alinhamento de caixa (maiúscula/minúscula)
         frase_ajustada, perfil_detectado = aplicar_heuristica_por_perfil(analise)
         
         tempo_total = time.time() - inicio_timer
         
-        print("=== RESULTADO DO SCAN OCR DE FRASES ===")
+        print("\n=== RESULTADO DO SCAN OCR DE FRASES ===")
         print(f"Estilo Predominante Detectado: {perfil_detectado.upper()}")
         print(f"Frase Bruta (IA):              {frase_bruta}")
         print(f"Frase Ajustada (Heurística):   {frase_ajustada}")

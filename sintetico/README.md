@@ -1,5 +1,6 @@
 <div align="justify">
 
+
 # Documentação Técnica: Pipeline de Treinamento, Validação e Checkpointing
 
 Este documento descreve as etapas de engenharia de dados, modelagem convolucional e governança de métricas do script `train_and_evaluate.py`. O objetivo deste script é criar uma inteligência unificada capaz de reconhecer 62 classes de caracteres misturando caligrafia humana e fontes digitais sintéticas do Windows.
@@ -45,77 +46,100 @@ Diferente de loops tradicionais, este script adota um mecanismo rígido de **Mod
 
 # Documentação Técnica do Processamento de Imagem: 
 
-O ciclo de vida do processamento de uma imagem dentro do script predict_batching.py segue um pipeline linear dividido em 6 etapas de execução e 1 etapa de pós-processamento:
 
-[Imagem de Entrada] 
-       │
-       ▼
-1. Pré-processamento (OpenCV: Tons de Cinza ➔ Otsu)
-       │
-       ▼
-2. Segmentação (Projeção Vertical ➔ Detecção de Letras e Espaços)
-       │
-       ▼
-3. Normalização Individual (Redimensionamento para 28x28 + Padding)
-       │
-       ▼
-4. Montagem do Batch (torch.stack em Tensor 4D)
-       │
-       ▼
-5. Inferência em Paralelo (Passo Forward na CNN do PyTorch)
-       │
-       ▼
-6. Reconstrução Textual (Mapeamento de Índices e Injeção de Espaços)
-       │
-       ▼
-[Pós-Processamento] (Heurística de Correção de Caixa / Perfil)
-       │
-       ▼
-[Frase Final Ajustada]
+O Menu Interativo: exibir_menu()
+
+Esta função cria uma interface visual simples no terminal usando um laço de repetição infinito (while True):
+• Exibição: Desenha linhas de igual (=) e exibe as opções numeradas de 0 a 3.
+• Captura da Opção: Lê o que o usuário digitou usando input() e remove espaços extras com .strip().
+• Estrutura de Decisão (if/elif/else):
+	• Se digitar 1, chama executar_script('predict.py')
+	• Se digitar 2, chama executar_script('predict_word.py')
+	• Se digitar 3, chama executar_script('predict_frase.py')
+	• Se digitar 0, exibe uma mensagem de despedida e usa o comando break para encerrar o laço while, fechando o programa.
+	• Se digitar qualquer outra coisa, avisa que a opção é inválida e reinicia o menu.
 
 
-🔬 Detalhamento Técnico das Componentes
+![](Iamtheone.jpg)
 
+# Documentação Técnica: Script de Reconhecimento de Frases (OCR)
 
-1. Estrutura da Rede Neural (EMNISTCNN)
+Este script implementa um pipeline completo de OCR (Optical Character Recognition) especializado no dataset EMNIST (62 classes: números, letras maiúsculas e minúsculas). Ele é projetado para receber uma imagem contendo uma frase manuscrita ou impressa, segmentar os caracteres individuais, agrupá-los em lote (batching) para processamento paralelo em uma Rede Neural Convolucional (CNN), e reconstruir o texto aplicando heurísticas de pós-processamento.
 
-O modelo é uma rede convolucional otimizada para classificação de caracteres isolados:
-• Camadas Convolucionais (conv1 e conv2): Utilizam extratores de características com filtros 3×3, seguidos de Batch Normalization (para estabilizar o mapeamento) e ativações ReLU. O MaxPool2d reduz a dimensionalidade espacial pela metade a cada bloco.
-• Camada Totalmente Conectada (fc): Achata a matriz de características de 64 × 7 × 7 para um vetor, aplica uma camada intermediária de 128 neurônios, um mecanismo de Dropout (30%) para evitar overfitting, e finalmente mapeia os resultados para as 62 saídas correspondentes às classes do EMNIST.
+🛠️ 1. Mapeamento de Classes e Estrutura da Rede Neural (CNN)
 
-2. O Pipeline da Função prever_frase
+Lista Oficial de Classes (EMNIST_CLASSES)
 
+O script define uma lista com 62 classes na ordem exata em que a rede foi treinada:
+• 0-9 (10 números)
+• A-Z (26 letras maiúsculas)
+• a-z (26 letras minúsculas)
 
-Etapa 1: Pré-processamento de Imagem
+Arquitetura do Modelo (EMNISTCNN)
 
-O OpenCV carrega a imagem e a converte para tons de cinza. O script valida a média dos pixels: se o fundo for predominantemente claro, a imagem é invertida (cv2.bitwise_not), garantindo que o texto fique branco e o fundo preto (padrão exigido pelo EMNIST). A binarização final é feita pelo algoritmo de Otsu, que encontra o limiar de corte ideal de forma automática.
+O modelo é uma rede convolucional clássica baseada no PyTorch (nn.Module):
 
-Etapa 2: Segmentação por Projeção Vertical e Heurística de Espaço
+• Camadas Convolucionais: Extraem características visuais locais (bordas, curvas das letras). O BatchNorm2d estabiliza o treino e o MaxPool2d reduz a resolução espacial.
+• Camada Totalmente Conectada (FC): Mapeia as características extraídas para as 62 classes. O Dropout(0.3) foi adicionado para mitigar o overfitting.
 
-• Detecção de Caracteres: O script soma os pixels brancos de cada coluna vertical da imagem (np.sum(thresh, axis=0)). Áreas onde a soma é maior que zero indicam a presença de caracteres. O início e o fim de cada sequência contínua determinam as coordenadas horizontais (X) da letra. O corte vertical (Y) é refinado fazendo uma projeção horizontal na coluna isolada.
-• Cálculo Estatístico de Espaços: Enquanto mapeia as letras, o script registra a distância em pixels entre o fim de um caractere e o início do próximo. No final da análise, calcula-se a média dessas distâncias. Se um vão específico for maior do que 1.5 vezes a média geral dos vãos, o algoritmo o classifica como um espaço entre palavras real e armazena o índice exato para injeção posterior.
+🖨️ 2. Visualização ANSI no Terminal (exibir_frase_no_terminal)
 
-Etapa 3 e 4: Normalização e Engenharia do Batch
+Uma característica única deste script é a capacidade de desenhar a imagem binarizada diretamente no terminal (como PowerShell ou CMD) antes da inferência.
+• Ele redimensiona a imagem para caber no limite horizontal do terminal (largura_maxima=90).
+• Utiliza códigos de escape ANSI de 256 cores (\033[38;5;...m).
+• Aplica a técnica de meio-bloco (▀), combinando a cor de primeiro plano (foreground) e plano de fundo (background) para renderizar dois pixels verticais usando apenas um caractere físico no terminal, preservando a proporção da imagem.
 
-Cada letra recortada possui um tamanho arbitrário. Para que a IA compreenda o dado:
-1. Adiciona-se uma borda proporcional (cv2.copyMakeBorder) para evitar que as extremidades da letra encostem na borda.
-2. A imagem é redimensionada para exatos 28×28 pixels.
-3. O transformador converte a imagem em um Tensor do PyTorch e normaliza a média e o desvio padrão com base nos parâmetros do EMNIST.
-4. O Segredo da Performance: Em vez de rodar o modelo para cada letra, todas as matrizes 3D individuais são empilhadas usando torch.stack(). Isso gera um único bloco de dados quadridimensional no formato [Número de Letras, 1, 28, 28], que é transferido de uma só vez para a memória do dispositivo (device), seja ele CPU ou GPU (CUDA).
+🔍 3. Pipeline Principal de Predição (prever_frase)
 
-Etapa 5 e 6: Inferência Paralela e Tradução
+Esta função executa o processamento em 6 etapas cronometradas:
 
-Com o bloco posicionado no hardware de processamento, o modelo realiza um único passo de predição (forward). O PyTorch calcula as probabilidades de todas as letras da frase em paralelo.
-A função torch.max(probabilidades, dim=1) extrai os índices da classe com maior acerto e sua respectiva porcentagem de confiança. O script então converte esses tensores de volta para listas nativas do Python através do comando .cpu().tolist() (uma operação altamente otimizada) e reconstrói a string bruta caractere por caractere, inserindo os espaços em branco determinados na etapa 2.
+Etapa 1/6: Carregamento e Pré-processamento
 
-3. Pós-Processamento (aplicar_heuristica_por_perfil)
+• A imagem é lida via OpenCV (cv2.imread) e convertida para tons de cinza.
+• Inversão de Cores Inteligente: Se a média dos pixels for clara (> 127), o script inverte as cores (bitwise_not), pois o EMNIST exige fundo preto e letras brancas.
+• Binarização: Aplica o algoritmo de Otsu (THRESH_OTSU) junto com o limiar binário simples para transformar a imagem estritamente em preto e branco (0 ou 255).
 
-Modelos OCR focados em caracteres isolados frequentemente confundem letras de formatos semelhantes em caixas diferentes (como 'O' maiúsculo e 'o' minúsculo, ou o número '1' com as letras 'l' ou 'I'). Para mitigar este problema sem a necessidade de um modelo de linguagem (NLP) pesado, o script utiliza uma votação estatística por perfil:
-1. Detecção de Estilo: O script analisa os caracteres cuja confiança da IA foi superior a 75%. Ele conta quantas letras pertencem estritamente ao grupo de "indicadores maiúsculos" (ex: A, B, D, E) versus "indicadores minúsculos" (ex: a, b, d, e).
-2. Definição do Perfil: O grupo com maior número de votos define o estilo predominante da frase inteira (MAIUSCULO ou MINUSCULO).
-3. Substituição de Conflitos: Se o perfil detectado for minúsculo, o script converte toda a frase para minúscula e traduz o número 0 para a letra o e o número 1 para a letra l. Caso o perfil seja maiúsculo, a frase é convertida para caixa alta e as letras o, l e I ambíguas são corrigidas para os numerais 0 ou 1, dependendo do contexto geométrico avaliado.
+Etapa 2/6: Segmentação por Projeção Vertical
 
-📈 Conclusão sobre a Otimização por Batching
+• O script calcula o Histograma de Projeção Vertical acumulando os valores dos pixels ao longo do eixo Y (np.sum(thresh, axis=0)).
+• As colunas onde a soma é maior que 0 indicam a presença de caracteres; colunas com soma 0 indicam espaços vazios.
+• Delimitação de Caracteres: Ao encontrar um caractere, ele analisa também a projeção horizontal (axis=1) para cortar o excesso de espaço acima e abaixo da letra. Filtros de tamanho mínimo (w > 1 e h > 4) evitam ruídos.
+• Detecção de Espaço entre Palavras: O script calcula a média de largura dos espaços vazios. Se um espaço for maior que média * 1.5, ele é indexado para se tornar um caractere de espaço (" ") na string final.
 
-Ao adotar o processamento em lote (Batching), o script reduz o overhead gerado pela comunicação repetitiva entre o Python e o interpretador de C++ do PyTorch. Em cenários reais, o tempo de execução da inferência de uma frase com 15 a 20 caracteres cai de aproximadamente ~0.5 segundos (na abordagem antiga por loops sequenciais) para menos de ~0.005 segundos, tornando o pipeline limitado quase que puramente pelo tempo de leitura de disco da imagem efetuado pelo OpenCV.
-</div>
+Etapa 3/6: Transformações Padrão EMNIST
+
+• Para cada letra recortada:
+	1. Adiciona uma borda de preenchimento (padding) proporcional ao tamanho do caractere.
+	2. Redimensiona para exatamente 28x28 pixels (padrão do EMNIST).
+	3. Converte em tensor e normaliza utilizando a média (0.1736) e desvio padrão (0.3248) específicos do dataset.
+
+Etapa 4/6: Agrupamento em Batch
+
+• Em vez de enviar uma imagem por vez para a GPU/CPU (o que tornaria o processo lento), o script empilha todos os tensores de letras individuais em um único bloco tridimensional usando torch.stack(). O formato resultante é [N_Letras, 1, 28, 28].
+
+Etapa 5/6: Inferência Paralela (Passo Forward)
+
+• Coloca o modelo em modo de avaliação (torch.no_grad()) para poupar memória e acelerar o processamento.
+• Alimenta a rede com o lote completo.
+• Aplica uma função Softmax para extrair as probabilidades e seleciona o índice com o maior valor de confiança (torch.max).
+
+Etapa 6/6: Reconstrução da Frase
+
+• Traduz os índices numéricos de volta para os caracteres de EMNIST_CLASSES.
+• Insere os espaços salvos na Etapa 2 nos locais correspondentes e monta a frase textual bruta.
+
+🧠 4. Pós-Processamento e Heurística de Caixa (aplicar_heuristica_por_perfil)
+
+Modelos de OCR baseados em caracteres individuais costumam confundir letras maiúsculas e minúsculas geometricamente idênticas (ex: 'O' vs 'o', 'C' vs 'c', 'S' vs 's'). O script resolve isso com um sistema de votação:
+1. Votação: Ele analisa caracteres com alta confiança (> 75%) que possuem formas explicitamente distintas em maiúsculas/minúsculas (Ex: ABDEFGHIJLMNQRTY vs abdefghijlmnqrty).
+2. Definição de Perfil: Se houver mais votos minúsculos, a frase inteira assume o perfil "minusculo", caso contrário assume "maiusculo".
+3. Ajuste e Correção de Ambiguidade:
+	• Se o perfil for minúsculo, o script força o texto para minúsculo e converte números ambíguos comuns em letras (ex: 0 vira o, 1 vira l).
+	• Se o perfil for maiúsculo, força o texto para maiúsculo e converte letras ambíguas em números (ex: o/I/l viram 0/1/1).
+
+🚀 5. Bloco de Execução Principal (__main__)
+
+• Correção para Windows: Evita que cliques acidentais de seleção no terminal travem a execução assíncrona do PyTorch limpando flags específicas do console usando a biblioteca nativa ctypes (kernel32.SetConsoleMode).
+• Seleção de Hardware: Detecta se há uma GPU disponível (cuda) ou se deve executar na cpu.
+• Inicialização: Instancia a rede neural, carrega os pesos pré-treinados salvos em um arquivo .pth, coloca a rede em modo de avaliação (.eval()) e dispara o pipeline.
+• Saída final: Exibe o tempo gasto, o estilo predominante detectado, a frase bruta devolvida pela inteligência artificial e a frase final corrigida pelas heurísticas.

@@ -50,9 +50,44 @@ class EMNISTCNN(nn.Module):
         return x
 
 # =====================================================================
-# 3. FUNÇÃO DE RECORTE VIA PROJEÇÃO VERTICAL COM DETECÇÃO DE ESPAÇO
+# FUNÇÃO DE SUPORTE: VISUALIZAÇÃO DA PALAVRA EM TEXTO COMPACTO (ANSI)
 # =====================================================================
-def prever_frase(caminho_da_imagem, modelo, device):
+def exibir_palavra_no_terminal(img_cinza, largura_maxima=90):
+    """
+    Redimensiona a imagem processada para caber na janela do PowerShell
+    e a renderiza usando meio-bloco ANSI (2 pixels verticais por caractere).
+    """
+    altura_orig, largura_orig = img_cinza.shape
+    
+    nova_largura = min(largura_maxima, largura_orig)
+    proporcao = nova_largura / float(largura_orig)
+    nova_altura = int(float(altura_orig) * proporcao)
+    
+    if nova_altura % 2 != 0:
+        nova_altura += 1
+        
+    img_redim = cv2.resize(img_cinza, (nova_largura, nova_altura), interpolation=cv2.INTER_AREA)
+    
+    print("\n--- VISUALIZAÇÃO DA PALAVRA (TERMINAL ANSI) ---")
+    for y in range(0, nova_altura, 2):
+        linha_pixels = []
+        for x in range(0, nova_largura):
+            p_superior = img_redim[y, x]
+            p_inferior = img_redim[y + 1, x] if (y + 1) < nova_altura else 0
+            
+            ansi_superior = 232 + int(p_superior / 11.1)
+            ansi_inferior = 232 + int(p_inferior / 11.1)
+            
+            bloco = f"\033[38;5;{ansi_superior};48;5;{ansi_inferior}m▀"
+            linha_pixels.append(bloco)
+            
+        print("".join(linha_pixels) + "\033[0m")
+    print("-----------------------------------------------\n")
+
+# =====================================================================
+# 3. FUNÇÃO DE RECORTE VIA PROJEÇÃO VERTICAL (APENAS UMA PALAVRA)
+# =====================================================================
+def prever_palavra(caminho_da_imagem, modelo, device):
     img = cv2.imread(caminho_da_imagem)
     if img is None:
         raise FileNotFoundError(f"Não foi possível encontrar ou abrir a imagem: {caminho_da_imagem}")
@@ -64,34 +99,30 @@ def prever_frase(caminho_da_imagem, modelo, device):
         
     _, thresh = cv2.threshold(cinza, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     
+    # Exibe a imagem de forma gráfica dentro do PowerShell antes dos cortes
+    exibir_palavra_no_terminal(thresh, largura_maxima=90)
+    
     # Histograma de Projeção Vertical
     projecao_vertical = np.sum(thresh, axis=0)
     
     blocos_letras = []
-    espacos_vazios = []
     em_caractere = False
     x_inicio = 0
-    x_fim_anterior = None
     
-    # Passo 1: Mapear todas as coordenadas de letras e coletar larguras de espaços vazios
+    # Passo 1: Mapear apenas as coordenadas de letras isoladas (sem contar espaços vazios amplos)
     for x, soma_coluna in enumerate(projecao_vertical):
         if soma_coluna > 0 and not em_caractere:
             x_inicio = x
             em_caractere = True
-            # Se havia uma letra antes, calcula a distância (espaço em branco) até a letra atual
-            if x_fim_anterior is not None:
-                largura_espaco = x_inicio - x_fim_anterior
-                espacos_vazios.append((len(blocos_letras), largura_espaco)) # Guarda o índice da letra e o tamanho do espaço
         elif soma_coluna == 0 and em_caractere:
             x_fim = x
             em_caractere = False
-            x_fim_anterior = x_fim
             
             coluna_recortada = thresh[:, x_inicio:x_fim]
             projecao_horizontal = np.sum(coluna_recortada, axis=1)
             indices_y = np.where(projecao_horizontal > 0)
             
-            if len(indices_y) > 0:
+            if len(indices_y[0]) > 0:
                 y_inicio = indices_y[0][0]
                 y_fim = indices_y[0][-1]
                 w = x_fim - x_inicio
@@ -99,32 +130,16 @@ def prever_frase(caminho_da_imagem, modelo, device):
                 if w > 1 and h > 4:
                     blocos_letras.append((x_inicio, y_inicio, w, h))
 
-    # 📊 LIMITE MATEMÁTICO DO ESPAÇO:
-    # Se encontramos espaços vazios, definimos que um espaço de palavra real
-    # deve ser maior que a média de todos os vãos encontrados na imagem multiplicado por 1.5.
-    limite_espaco_palavra = 10  # Fallback padrão em pixels
-    if len(espacos_vazios) > 0:
-        larguras = [e[1] for e in espacos_vazios]
-        limite_espaco_palavra = np.mean(larguras) * 1.5
-
-    # Índices onde devemos injetar um caractere de espaço " "
-    indices_com_espaco = {e[0] for e in espacos_vazios if e[1] > limite_espaco_palavra}
-
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.1736,), (0.3248,))
     ])
     
-    frase_bruta = ""
+    palavra_bruta = ""
     detalhes_letras = []
     
-    # Passo 2: Fazer a inferência letra por letra e injetar os espaços
+    # Passo 2: Fazer a inferência contínua letra por letra
     for i, (x, y, w, h) in enumerate(blocos_letras):
-        # Injeta o espaço antes da letra se o índice foi detectado como espaço longo
-        if i in indices_com_espaco:
-            frase_bruta += " "
-            detalhes_letras.append({"posicao": "Espaço", "letra": " ", "confianca_num": 100.0, "confianca": "100%"})
-
         recorte_letra = thresh[y:y+h, x:x+w]
         pad = max(w, h) // 4
         recorte_letra = cv2.copyMakeBorder(recorte_letra, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
@@ -141,7 +156,7 @@ def prever_frase(caminho_da_imagem, modelo, device):
             letra_prevista = EMNIST_CLASSES[indice_previsto.item()]
             confianca = maior_prob.item() * 100
             
-            frase_bruta += letra_prevista
+            palavra_bruta += letra_prevista
             detalhes_letras.append({
                 "posicao": len(detalhes_letras) + 1,
                 "letra": letra_prevista,
@@ -149,7 +164,7 @@ def prever_frase(caminho_da_imagem, modelo, device):
                 "confianca": f"{confianca:.2f}%"
             })
             
-    return frase_bruta, detalhes_letras
+    return palavra_bruta, detalhes_letras
 
 # =====================================================================
 # 4. HEURÍSTICA BASEADA EM CONFIANÇA GERAL (VOTAÇÃO PERFIL)
@@ -162,8 +177,6 @@ def aplicar_heuristica_por_perfil(detalhes_letras):
     indicadores_minusculos = set("abdefghijlmnqrty")
     
     for c in detalhes_letras:
-        if c['posicao'] == "Espaço":
-            continue
         letra = c['letra']
         if c['confianca_num'] > 75.0:
             if letra in indicadores_maiusculos:
@@ -179,9 +192,6 @@ def aplicar_heuristica_por_perfil(detalhes_letras):
     frase_ajustada = ""
     for c in detalhes_letras:
         letra = c['letra']
-        if c['posicao'] == "Espaço":
-            frase_ajustada += " "
-            continue
             
         if estilo_predominante == "minusculo":
             if letra in numeros_para_letras:
@@ -200,29 +210,32 @@ def aplicar_heuristica_por_perfil(detalhes_letras):
 # 5. EXECUÇÃO PRINCIPAL
 # =====================================================================
 if __name__ == "__main__":
+    import sys
+    if sys.platform == "win32":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), 0xF7)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     caminho_pesos = r"E:\ocr\sd392-t25s2-group5\sintetico\modelo_emnist.pth"
-    
-    # ⚠️ Aponte para a imagem que contém a sua frase com espaços
-    caminho_da_imagem_frase = r"E:\ocr\sd392-t25s2-group5\sintetico\frase.jpg"
+    caminho_da_imagem_palavra = r"E:\ocr\sd392-t25s2-group5\sintetico\palavra_teste.jpg"
     
     print("Carregando pesos da inteligência artificial...")
     modelo_ocr = EMNISTCNN(num_classes=62)
     modelo_ocr.load_state_dict(torch.load(caminho_pesos, map_location=device, weights_only=False))
     modelo_ocr.to(device).eval()
-    print("Modelo pronto para inferência de frases.\n")
+    print("Modelo pronto para inferência de uma única palavra.\n")
     
     try:
-        # 1. Executa a predição rastreando os espaços vazios longos
-        frase_bruta, analise = prever_frase(caminho_da_imagem_frase, modelo_ocr, device)
+        # Processa e exibe de forma assíncrona o texto gráfico no terminal
+        palavra_bruta, analise = prever_palavra(caminho_da_imagem_palavra, modelo_ocr, device)
         
-        # 2. Executa o alinhamento de caixa (maiúscula/minúscula) preservando os espaços
-        frase_ajustada, perfil_detectado = aplicar_heuristica_por_perfil(analise)
+        palavra_ajustada, perfil_detectado = aplicar_heuristica_por_perfil(analise)
         
-        print("=== RESULTADO DO SCAN OCR DE FRASES ===")
+        print("=== RESULTADO DO SCAN OCR (UMA PALAVRA) ===")
         print(f"Estilo Predominante Detectado: {perfil_detectado.upper()}")
-        print(f"Frase Bruta (IA):              {frase_bruta}")
-        print(f"Frase Ajustada (Heurística):   {frase_ajustada}\n")
+        print(f"Palavra Bruta (IA):            {palavra_bruta}")
+        print(f"Palavra Ajustada (Heurística): {palavra_ajustada}\n")
         
     except Exception as e:
         print(f"Erro ao processar imagem: {e}")
