@@ -37,10 +37,13 @@ Diferente de loops tradicionais, este script adota um mecanismo rígido de **Mod
 * **Salvamento Condicional Inteligente:** No final de cada época de treino, a rede entra em modo de congelamento de parâmetros (`model.eval()`). Se a acurácia calculada sobre os dados de teste for estatisticamente superior à maior acurácia registrada nas épocas anteriores, o arquivo `modelo_emnist.pth` é atualizado na pasta de trabalho. Se o desempenho cair ou estagnar, o arquivo em disco é preservado intacto.
 * **Renderização de Learning Curves:** O script alimenta um dicionário de histórico (`history`) capturando o comportamento do Erro (Loss) e da Acurácia ao longo das iterações. Ao final de todas as épocas, a biblioteca **matplotlib** plota de forma automática dois subgráficos na tela e os exporta como `curvas_de_aprendizado.png` para inspeção visual do analista.
 
+![](curvas_de_aprendizado.png)
 
-# Documentação Técnica: 
 
-O ciclo de vida do processamento de uma imagem dentro do script predict_batchig.py segue um pipeline linear dividido em 6 etapas de execução e 1 etapa de pós-processamento:
+
+# Documentação Técnica do Processamento de Imagem: 
+
+O ciclo de vida do processamento de uma imagem dentro do script predict_batching.py segue um pipeline linear dividido em 6 etapas de execução e 1 etapa de pós-processamento:
 
 [Imagem de Entrada] 
        │
