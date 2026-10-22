@@ -5,6 +5,7 @@ import numpy as np
 from PIL import Image
 import torch.nn as nn
 import os
+import sys
 import time
 
 # =====================================================================
@@ -51,41 +52,6 @@ class EMNISTCNN(nn.Module):
         return x
 
 # =====================================================================
-# FUNÇÃO DE SUPORTE: VISUALIZAÇÃO DA FRASE EM TEXTO COMPACTO (ANSI)
-# =====================================================================
-def exibir_frase_no_terminal(img_cinza, largura_maxima=90):
-    """
-    Redimensiona a imagem processada para caber na janela do PowerShell
-    e a renderiza usando meio-bloco ANSI (2 pixels verticais por caractere).
-    """
-    altura_orig, largura_orig = img_cinza.shape
-    
-    nova_largura = min(largura_maxima, largura_orig)
-    proporcao = nova_largura / float(largura_orig)
-    nova_altura = int(float(altura_orig) * proporcao)
-    
-    if nova_altura % 2 != 0:
-        nova_altura += 1
-        
-    img_redim = cv2.resize(img_cinza, (nova_largura, nova_altura), interpolation=cv2.INTER_AREA)
-    
-
-    for y in range(0, nova_altura, 2):
-        linha_pixels = []
-        for x in range(0, nova_largura):
-            p_superior = img_redim[y, x]
-            p_inferior = img_redim[y + 1, x] if (y + 1) < nova_altura else 0
-            
-            ansi_superior = 232 + int(p_superior / 11.1)
-            ansi_inferior = 232 + int(p_inferior / 11.1)
-            
-            bloco = f"\033[38;5;{ansi_superior};48;5;{ansi_inferior}m▀"
-            linha_pixels.append(bloco)
-            
-        print("".join(linha_pixels) + "\033[0m")
-
-
-# =====================================================================
 # 3. FUNÇÃO DE RECORTE COM PROCESSAMENTO EM LOTE (BATCHING) E STATUS
 # =====================================================================
 def prever_frase(caminho_da_imagem, modelo, device):
@@ -103,12 +69,7 @@ def prever_frase(caminho_da_imagem, modelo, device):
         
     _, thresh = cv2.threshold(cinza, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     
-
-
     print(f"   ↳ Imagem carregada e binarizada com sucesso. ({time.time() - t_inicio:.4f}s)")
-
-    exibir_frase_no_terminal(thresh, largura_maxima=90)
-
     print("🔄 [Etapa 2/6] Analisando projeção vertical para segmentar caracteres...")
     t_etapa = time.time()
     
@@ -272,8 +233,6 @@ def aplicar_heuristica_por_perfil(detalhes_letras):
 # 5. EXECUÇÃO PRINCIPAL
 # =====================================================================
 if __name__ == "__main__":
-    import sys
-    # IMPEDE QUE CLIQUES NO TERMINAL DO WINDOWS TRAVEM O PYTORCH
     if sys.platform == "win32":
         import ctypes
         kernel32 = ctypes.windll.kernel32
@@ -282,7 +241,15 @@ if __name__ == "__main__":
     print("Inicializando o sistema...")  
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     caminho_pesos = r"E:\ocr\sd392-t25s2-group5\sintetico\modelo_emnist.pth"
-    caminho_da_imagem_frase = r"E:\ocr\sd392-t25s2-group5\sintetico\frase2.jpg"
+    
+    # =====================================================================
+    # CAPTURA DE PARÂMETROS CLI VIA MENU (sys.argv)
+    # =====================================================================
+    if len(sys.argv) > 1:
+        caminho_da_imagem_frase = sys.argv[1]
+    else:
+        caminho_da_imagem_frase = r"E:\ocr\sd392-t25s2-group5\sintetico\frase2.jpg"
+    # =====================================================================
     
     print(f"Utilizando dispositivo de hardware: {device}")
     print("Carregando pesos da inteligência artificial...")
@@ -292,16 +259,12 @@ if __name__ == "__main__":
     print("Modelo pronto para inferência de frases.\n")
     
     try:
-        import time
         inicio_timer = time.time()
         
         print("[PROCESSANDO] Segmentando imagem e executando inferência no modelo (Batching)...")
-        
-        # 1. Executa a predição via Batching (O desenho ANSI roda aqui dentro)
         frase_bruta, analise = prever_frase(caminho_da_imagem_frase, modelo_ocr, device)
         
         print("[PROCESSANDO] Aplicando regras heurísticas de maiúsculas/minúsculas...")
-        # 2. Executa o alinhamento de caixa (maiúscula/minúscula)
         frase_ajustada, perfil_detectado = aplicar_heuristica_por_perfil(analise)
         
         tempo_total = time.time() - inicio_timer

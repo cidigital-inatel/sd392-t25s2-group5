@@ -5,6 +5,7 @@ import numpy as np
 from PIL import Image
 import torch.nn as nn
 import os
+import sys  # Importado para ler os argumentos do terminal (sys.argv)
 
 # =====================================================================
 # 1. LISTA OFICIAL DE CLASSES (62 CLASSES - MESMA ORDEM DO TREINO)
@@ -50,41 +51,6 @@ class EMNISTCNN(nn.Module):
         return x
 
 # =====================================================================
-# FUNÇÃO DE SUPORTE: VISUALIZAÇÃO DA PALAVRA EM TEXTO COMPACTO (ANSI)
-# =====================================================================
-def exibir_palavra_no_terminal(img_cinza, largura_maxima=90):
-    """
-    Redimensiona a imagem processada para caber na janela do PowerShell
-    e a renderiza usando meio-bloco ANSI (2 pixels verticais por caractere).
-    """
-    altura_orig, largura_orig = img_cinza.shape
-    
-    nova_largura = min(largura_maxima, largura_orig)
-    proporcao = nova_largura / float(largura_orig)
-    nova_altura = int(float(altura_orig) * proporcao)
-    
-    if nova_altura % 2 != 0:
-        nova_altura += 1
-        
-    img_redim = cv2.resize(img_cinza, (nova_largura, nova_altura), interpolation=cv2.INTER_AREA)
-    
-    print("\n--- VISUALIZAÇÃO DA PALAVRA (TERMINAL ANSI) ---")
-    for y in range(0, nova_altura, 2):
-        linha_pixels = []
-        for x in range(0, nova_largura):
-            p_superior = img_redim[y, x]
-            p_inferior = img_redim[y + 1, x] if (y + 1) < nova_altura else 0
-            
-            ansi_superior = 232 + int(p_superior / 11.1)
-            ansi_inferior = 232 + int(p_inferior / 11.1)
-            
-            bloco = f"\033[38;5;{ansi_superior};48;5;{ansi_inferior}m▀"
-            linha_pixels.append(bloco)
-            
-        print("".join(linha_pixels) + "\033[0m")
-    print("-----------------------------------------------\n")
-
-# =====================================================================
 # 3. FUNÇÃO DE RECORTE VIA PROJEÇÃO VERTICAL (APENAS UMA PALAVRA)
 # =====================================================================
 def prever_palavra(caminho_da_imagem, modelo, device):
@@ -99,9 +65,6 @@ def prever_palavra(caminho_da_imagem, modelo, device):
         
     _, thresh = cv2.threshold(cinza, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     
-    # Exibe a imagem de forma gráfica dentro do PowerShell antes dos cortes
-    exibir_palavra_no_terminal(thresh, largura_maxima=90)
-    
     # Histograma de Projeção Vertical
     projecao_vertical = np.sum(thresh, axis=0)
     
@@ -109,7 +72,7 @@ def prever_palavra(caminho_da_imagem, modelo, device):
     em_caractere = False
     x_inicio = 0
     
-    # Passo 1: Mapear apenas as coordenadas de letras isoladas (sem contar espaços vazios amplos)
+    # Passo 1: Mapear apenas as coordenadas de letras isoladas
     for x, soma_coluna in enumerate(projecao_vertical):
         if soma_coluna > 0 and not em_caractere:
             x_inicio = x
@@ -210,7 +173,6 @@ def aplicar_heuristica_por_perfil(detalhes_letras):
 # 5. EXECUÇÃO PRINCIPAL
 # =====================================================================
 if __name__ == "__main__":
-    import sys
     if sys.platform == "win32":
         import ctypes
         kernel32 = ctypes.windll.kernel32
@@ -218,7 +180,15 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     caminho_pesos = r"E:\ocr\sd392-t25s2-group5\sintetico\modelo_emnist.pth"
-    caminho_da_imagem_palavra = r"E:\ocr\sd392-t25s2-group5\sintetico\palavra_teste.jpg"
+    
+    # =====================================================================
+    # ALTERAÇÃO CRÍTICA: Captura dinamicamente o parâmetro vindo do menu
+    # =====================================================================
+    if len(sys.argv) > 1:
+        caminho_da_imagem_palavra = sys.argv[1]
+    else:
+        caminho_da_imagem_palavra = r"E:\ocr\sd392-t25s2-group5\sintetico\palavra_teste.jpg" # Fallback de segurança
+    # =====================================================================
     
     print("Carregando pesos da inteligência artificial...")
     modelo_ocr = EMNISTCNN(num_classes=62)
@@ -227,9 +197,7 @@ if __name__ == "__main__":
     print("Modelo pronto para inferência de uma única palavra.\n")
     
     try:
-        # Processa e exibe de forma assíncrona o texto gráfico no terminal
         palavra_bruta, analise = prever_palavra(caminho_da_imagem_palavra, modelo_ocr, device)
-        
         palavra_ajustada, perfil_detectado = aplicar_heuristica_por_perfil(analise)
         
         print("=== RESULTADO DO SCAN OCR (UMA PALAVRA) ===")
