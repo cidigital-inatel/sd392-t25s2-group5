@@ -1,4 +1,6 @@
-# Documentação Técnica: Pipeline de Treinamento, Validação e Checkpointing EMNIST 62 Classes
+<div align="justify">
+
+# Documentação Técnica: Pipeline de Treinamento, Validação e Checkpointing
 
 Este documento descreve as etapas de engenharia de dados, modelagem convolucional e governança de métricas do script `train_and_evaluate.py`. O objetivo deste script é criar uma inteligência unificada capaz de reconhecer 62 classes de caracteres misturando caligrafia humana e fontes digitais sintéticas do Windows.
 
@@ -7,7 +9,7 @@ Este documento descreve as etapas de engenharia de dados, modelagem convoluciona
 ## 🛠️ Engenharia de Dados Sintéticos Nativos
 
 O script utiliza uma classe personalizada chamada `WindowsFontDataset` que estende a estrutura padrão `torch.utils.data.Dataset`. Essa arquitetura oferece vantagens fundamentais de desempenho:
-1. **Geração em Tempo de Execução (On-the-fly):** As imagens de 28x28 pixels não são gravadas fisicamente no HD. Elas são renderizadas diretamente na memória RAM usando a biblioteca Pillow (PIL) a partir das fontes `.ttf` instaladas na pasta do sistema operativo (`C:\Windows\Fonts`).
+1. **Geração em Tempo de Execução (On-the-fly):** As imagens de 28x28 pixels não são gravadas fisicamente no HD. Elas são renderizadas diretamente na memória RAM usando a biblioteca Pillow (PIL) a partir das fontes `.ttf` instaladas na pasta do sistema operacional (`C:\Windows\Fonts`).
 2. **Correção de Bounding Box Sutil:** O script calcula as coordenadas exatas ocupadas por cada caractere usando o método `draw.textbbox`. Isso neutraliza o espaçamento invisível ("offset") que varia de fonte para fonte, garantindo que letras como "g", "j" ou "p" fiquem milimetricamente centralizadas sem sofrerem cortes nas bordas.
 3. **Filtro Automático de Símbolos:** O script utiliza o módulo nativo `glob` para varrer os arquivos do sistema e remove automaticamente fontes exclusivas de símbolos, como *Wingdings* ou *Webdings*, impedindo a injeção de ruídos estocásticos que poderiam desregular os pesos de convergência da rede neural.
 
@@ -116,3 +118,4 @@ Modelos OCR focados em caracteres isolados frequentemente confundem letras de fo
 📈 Conclusão sobre a Otimização por Batching
 
 Ao adotar o processamento em lote (Batching), o script reduz o overhead gerado pela comunicação repetitiva entre o Python e o interpretador de C++ do PyTorch. Em cenários reais, o tempo de execução da inferência de uma frase com 15 a 20 caracteres cai de aproximadamente ~0.5 segundos (na abordagem antiga por loops sequenciais) para menos de ~0.005 segundos, tornando o pipeline limitado quase que puramente pelo tempo de leitura de disco da imagem efetuado pelo OpenCV.
+</div>
