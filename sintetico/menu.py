@@ -110,7 +110,7 @@ def exibir_menu():
         elif opcao == "2":
             executar_script("predict_word.py", "palavra_teste.jpg")
         elif opcao == "3":
-            executar_script("predict_frase.py", "frase2.jpg")
+            executar_script("predict_frase.py", "frase3.jpg")
         elif opcao == "0":
             print(f"\n\033[33;1mSaindo do programa. Até logo!{RESET}\n")
             break
