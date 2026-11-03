@@ -1,0 +1,8 @@
+{
+    "lib": "libvart-dpu-runner.so",
+    "filename": "ocr_emnist.xmodel",
+    "kernel": [
+        "subgraph_EMNISTCNN__EMNISTCNN_Sequential_conv1__Conv2d_0__ret_3"
+    ],
+    "target": "DPUCZDX8G_ISA1_B4096"
+}
