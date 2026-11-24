@@ -1,65 +1,51 @@
-Identificação
+# Aceleração de OCR Alfanumérico em FPGA/MPSoC com AMD/Xilinx Vitis AI
 
-Este Plano de Trabalho descreve a proposta para o presente projeto de trabalho de conclusão de curso (TCC) que será executado pelo aluno Alerson Anizio Ribeiro Rezende da segunda turma do programa CI Digital no polo Inatel, conforme descritos na tabela de identificação a seguir:
+Este repositório reúne o desenvolvimento, a quantização, a validação funcional e o código de implantação embarcada de uma Rede Neural Convolucional (`EMNISTCNN`) voltada ao Reconhecimento Óptico de Caracteres (OCR) de 62 classes alfanuméricas (`0–9`, `A–Z`, `a–z`), projetada para execução acelerada em **DPU (*Deep Learning Processing Unit*)** da plataforma AMD/Xilinx.
 
-|Título do Projeto|OCR  para imagens de 28x28 pixels MNIST/Extended MNIST|
-| - | - |
-|Duração de Execução|6 meses|
-|Mês de Início |Setembro de 2026|
-|Mês de Fim|Fevereiro de 2027|
-|Tópico Principal|Projeto de Circuitos Digitais|
-|Subáreas|Circuitos Digitais, IA, Rede Neural, Python,  WSL, AMD Vitis AI, AMD Vivado|
-|Membros     |Alerson Anizio Ribeiro Rezende|
-|Orientador|Dr. Elivander Judas Tadeu Pereira|
+---
 
-1.Objeto 
+## Arquitetura e Fluxo do Projeto
 
->Resumo
+O pipeline foi estruturado de forma modular em três etapas principais, cobrindo desde o treinamento e a compilação para silício até a validação *bit-accurate* e o *runtime* de produção:
 
-Projetar um sistema de OCR (Reconhecimento Óptico de Caracteres) para imagens de 28x28 pixels (formato clássico do MNIST/Extended MNIST) em SystemVerilog utilizando a metodologia UVM (Universal Verification Methodology) no AMD Xilinx Vivado envolve duas frentes: o design do acelerador de hardware (Inferência da IA) e o ambiente de verificação para garantir que o hardware funciona exatamente como o modelo matemático.
+```text
+[Treinamento FP32] ──▶ [Quantização INT8 & Compilação DPU] ──▶ [Validação Bit-Accurate] ──▶ [Runtime Embarcado VART]
+      (PyTorch)                 (vitis_ai_flow/)               (vitis_ai_validation/)         (vitis_ai_runtime/)
+```
 
->Objetivo Geral
+### Estrutura do Repositório
 
-O objetivo principal de um projeto de OCR (Reconhecimento Ótico de Caracteres) usando redes neurais em um FPGA é realizar a leitura e extração de textos de imagens com altíssima velocidade (baixa latência) e baixo consumo de energia, processando os dados diretamente no "hardware" (na borda/edge), sem depender de servidores em nuvem.
+| Diretório | Etapa do Pipeline | Descrição e Artefatos Principais |
+| :--- | :--- | :--- |
+| **[`vitis_ai_flow/`](./vitis_ai_flow)** | **Treinamento, Quantização e Compilação** | Definição da arquitetura `EMNISTCNN`, pesos treinados (`FP32`), fluxo de quantização (`vai_q_pytorch`) e compilação para a arquitetura alvo `DPUCZDX8G_ISA1_B4096` (`vai_c_xir`), gerando o binário `.xmodel`. |
+| **[`vitis_ai_validation/`](./vitis_ai_validation)** | **Simulação Bit-Accurate e Ablação PTQ** | Validação funcional `INT8` em host `x86_64` via `pytorch_nndct` (contornando a ausência física do dispositivo `/dev/dpu` no ambiente de desenvolvimento) e estudo comparativo entre calibração sintética e calibração com caracteres tipográficos reais. |
+| **[`vitis_ai_runtime/`](./vitis_ai_runtime)** | **Implantação Nativa (VART)** | Script de inferência para o sistema embarcado alvo (`vart_inference_ocr.py`) utilizando as APIs oficiais `XIR` e `VART` para comunicação com o acelerador DPU, gerenciamento de tensores e pós-processamento (`Softmax`). |
 
->Objetivos Específicos
+---
 
-São objetivos para a execução deste Plano de Trabalho:
+## Resumo dos Resultados Técnicos
 
-1. Treinamento (Software): Treinar uma Rede Neural Convolucional (CNN) simples ou uma Rede Neural Multicamadas (MLP) em Python (PyTorch ou TensorFlow) usando o dataset EMNIST (que contém letras e números).
-2. **Quantização:** Converter os pesos de ponto flutuante (Float32) para ponto fixo (como INT8). Hardwares FPGA são massivamente mais eficientes com números inteiros. 
-3. **Geração do IP:** Usar ferramentas como **hls4ml** (ferramenta de código aberto que converte modelos de IA para Vivado HLS) ou o **Vitis AI** para gerar o código RTL/SystemVerilog dos blocos de processamento (Convolução, Ativação ReLU, MaxPooling, Dense).
+### 1. Mapeamento de Hardware (`DPUCZDX8G_ISA1_B4096`)
+A inspeção estática do grafo compilado (`xdputil xmodel`) comprovou o mapeamento contínuo da rede para o acelerador:
+* **Particionamento:** 100% das camadas computacionais (`Conv2d`, `BatchNorm`, `ReLU`, `MaxPool` e `Linear`) foram fundidas em um único super-bloco executado nativamente na **DPU**.
+* **Carga Computacional:** `8.571.070` operações (~8,57 MOPS por inferência).
+* **Pegada de Memória na FPGA:** `440 KB` de constantes/pesos (`REG_0`), `9,2 KB` de *workspace* intermediário (`REG_1`) e `7.208` bytes de microcódigo de instruções da DPU.
 
->Problema de Pesquisa e Justificativa
+### 2. Desempenho Preditivo (`FP32` vs. `INT8`)
+A avaliação sobre um conjunto balanceado de **3.100 amostras** (62 classes) demonstrou que a recalibração do quantizador com caracteres reais recuperou **99,04%** da acurácia original em ponto flutuante:
 
-Projetar um sistema de OCR (Reconhecimento Óptico de Caracteres) usando Redes Neurais em um FPGA (Field Programmable Gate Array) une o poder de processamento da inteligência artificial com a alta eficiência do hardware dedicado.
+| Modelo | Precisão | Calibração PTQ | Acurácia Top-1 | Acurácia Top-5 |
+| :--- | :---: | :--- | :---: | :---: |
+| **Baseline Original** | `FP32` | — | **74,23%** | 96,90% |
+| **Quantizado Inicial** | `INT8` | Ruído Gaussiano Sintético | 69,55% | 96,71% |
+| **Quantizado Otimizado** | `INT8` | **Caracteres Reais (Fontes)** | **73,52%** | **96,97%** |
 
-A principal relevância dessa abordagem está em resolver três grandes gargalos de sistemas tradicionais (baseados em CPU/GPU): latência determinística, eficiência energética e autonomia de borda (Edge Computing).
+> Para detalhes completos da metodologia experimental, análise de erros e gráficos, consulte a documentação específica em **[`vitis_ai_validation/README.md`](./vitis_ai_validation/README.md)**.
 
->Desafios tecnológicos
+---
 
-Projetar um sistema de Reconhecimento Ótico de Caracteres (OCR) usando redes neurais em um FPGA (Field Programmable Gate Array) traz grandes vantagens de velocidade e eficiência energética, mas impõe desafios complexos de engenharia de hardware e software.
+## Ambiente de Desenvolvimento
 
-O principal desafio é o equilíbrio entre a precisão do modelo e a escassez de recursos físicos do chip.
-
-1. Desafios de Arquitetura e Hardware
-
-**Limitação de memória interna:** FPGAs possuem memória SRAM interna (BRAMs) muito rápida, mas limitada. Redes neurais profundas (CNNs/Transformers) possuem milhões de parâmetros que não cabem inteiramente nesse espaço.
-
-**Largura de banda de memória externa:** Buscar pesos na memória externa (como DDR) a cada camada cria um "gargalo de Von Neumann", reduzindo drasticamente a velocidade do processamento (taxa de transferência).
-
-**Consumo de blocos DSP:** Multiplicações de matrizes exigem muitos blocos DSP (Processamento de Sinal Digital). Modelos grandes esgotam esses blocos rapidamente.
-
-**Gerenciamento de clock e roteamento:** Conectar milhares de multiplicadores em paralelo gera problemas de atraso de sinal (frequência máxima de operação reduzida) e alto consumo de energia devido à alta taxa de chaveamento.
-
-1. Desafios de Software e Otimização
-
-**Necessidade de Quantização:** FPGAs processam dados em ponto flutuante (FP32) de forma muito ineficiente. É obrigatório converter o modelo para ponto fixo ou inteiros de baixa precisão (INT8, INT4 ou redes binárias), o que pode degradar a precisão do OCR se não for bem calibrado.
-
-**Poda de rede (Pruning):** Para caber no chip, é preciso remover neurônios e conexões irrelevantes da rede neural. Isso exige um ciclo complexo de retreinamento do modelo.
-
-**Complexidade do pipeline de OCR:** O OCR não é apenas a rede neural. Ele exige etapas de pré-processamento (binarização, rotação da imagem) e pós-processamento (correção ortográfica). Integrar tudo isso em pipelines de hardware sincronizados é extremamente difícil.
-
-**Ferramentas de Síntese de Alto Nível (HLS):** Embora ferramentas como o AMD Xilinx Vitis AI ou Intel OpenVINO facilitem a conversão de modelos (PyTorch/TensorFlow) para hardware, o ajuste fino para obter a máxima performance ainda exige conhecimento profundo de Linguagens de Descrição de Hardware (VHDL/Verilog).
-
-Para superar esses obstáculos, engenheiros costumam recorrer a **DPUs (Deep Learning Processing Units)** pré-projetadas e focam em otimizar a pipeline para que o processamento de imagem ocorra em tempo real (streaming).
+* **Framework de Treinamento:** PyTorch `1.13.1`
+* **Toolchain FPGA/DPU:** AMD/Xilinx Vitis AI `v3.5` (Docker `xilinx/vitis-ai-pytorch-gpu`)
+* **APIs de Runtime:** `XIR` (*Xilinx Intermediate Representation*) e `VART` (*Vitis AI Runtime*)

@@ -1,0 +1,31 @@
+{
+  "param":
+  {
+    "EMNISTCNN::conv1.0.weight":[[8,7]],
+    "EMNISTCNN::conv1.0.bias":[[8,7]],
+    "EMNISTCNN::conv2.0.weight":[[8,8]],
+    "EMNISTCNN::conv2.0.bias":[[8,6]],
+    "EMNISTCNN::fc.0.weight":[[8,7]],
+    "EMNISTCNN::fc.0.bias":[[8,8]],
+    "EMNISTCNN::fc.3.weight":[[8,6]],
+    "EMNISTCNN::fc.3.bias":[[8,7]]
+  },
+  "output":
+  {
+    "EMNISTCNN::nndct_input_0":[[8,5]],
+    "EMNISTCNN::nndct_relu_2":[[8,6]],
+    "EMNISTCNN::nndct_maxpool_3":[[8,6]],
+    "EMNISTCNN::nndct_relu_5":[[8,5]],
+    "EMNISTCNN::nndct_maxpool_6":[[8,5]],
+    "EMNISTCNN::nndct_relu_10":[[8,3]],
+    "EMNISTCNN::nndct_dense_11":[[8,1]]
+  },
+  "input":
+  {
+
+  },
+  "fast_finetuned":false,
+  "bias_corrected":true,
+  "version":"3.5.0+60df3f1+torch1.13.1+cu117",
+  "graph_md5":"bb7ef928da15fdef4dc686528e577960"
+}
